@@ -1,11 +1,8 @@
 node_modules
 .next
 .git
-.gitignore
 .env
 .env.*
 *.md
-.dockerignore
-railway.toml
 data/store.json
 npm-debug.log*
