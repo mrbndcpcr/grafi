@@ -20,6 +20,7 @@ function LoginForm() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ password }),
       });
       if (!res.ok) {
@@ -27,8 +28,8 @@ function LoginForm() {
         setBusy(false);
         return;
       }
-      router.replace(next.startsWith("/") ? next : "/");
-      router.refresh();
+      // Full navigation so the session cookie is definitely sent on the next request
+      window.location.assign(next.startsWith("/") ? next : "/");
     } catch {
       setError("Could not reach the studio. Try again.");
       setBusy(false);

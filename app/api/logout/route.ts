@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AUTH_COOKIE, authCookieOptions } from "@/lib/session";
 
-const COOKIE = "grafi_studio_auth";
-
-function loginRedirect(request: NextRequest) {
+function clearAndRedirect(request: NextRequest) {
   const host =
     request.headers.get("x-forwarded-host") ||
     request.headers.get("host") ||
@@ -14,20 +13,18 @@ function loginRedirect(request: NextRequest) {
     status: 303,
   });
   res.cookies.set({
-    name: COOKIE,
+    name: AUTH_COOKIE,
     value: "",
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
+    ...authCookieOptions(0),
   });
+  res.cookies.set({ name: "grafi_studio_auth", value: "", path: "/", maxAge: 0 });
   return res;
 }
 
 export async function POST(request: NextRequest) {
-  return loginRedirect(request);
+  return clearAndRedirect(request);
 }
 
 export async function GET(request: NextRequest) {
-  return loginRedirect(request);
+  return clearAndRedirect(request);
 }

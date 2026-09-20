@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-const COOKIE = "grafi_studio_auth";
+import {
+  AUTH_COOKIE,
+  expectedSessionToken,
+  sessionTokenFromPassword,
+} from "./lib/session";
 
 function absoluteUrl(request: NextRequest, path: string) {
   const host =
@@ -11,11 +14,10 @@ function absoluteUrl(request: NextRequest, path: string) {
   const proto =
     request.headers.get("x-forwarded-proto") ||
     (request.nextUrl.protocol === "https:" ? "https" : "http");
-  const url = new URL(path, `${proto}://${host}`);
-  return url;
+  return new URL(path, `${proto}://${host}`);
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
@@ -30,10 +32,29 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get(COOKIE)?.value;
-  const expected = process.env.GRAFI_STUDIO_PASSWORD;
-  if (expected && token === expected) {
+  const token = request.cookies.get(AUTH_COOKIE)?.value;
+  const expected = await expectedSessionToken();
+
+  if (expected && token && token === expected) {
     return NextResponse.next();
+  }
+
+  // Migrate one release: old cookie stored the raw password
+  const legacy = request.cookies.get("grafi_studio_auth")?.value;
+  const password = process.env.GRAFI_STUDIO_PASSWORD;
+  if (password && legacy && legacy === password) {
+    const res = NextResponse.next();
+    res.cookies.set({
+      name: AUTH_COOKIE,
+      value: await sessionTokenFromPassword(password),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    res.cookies.set({ name: "grafi_studio_auth", value: "", path: "/", maxAge: 0 });
+    return res;
   }
 
   if (pathname.startsWith("/api/")) {

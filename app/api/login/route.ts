@@ -1,14 +1,17 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  AUTH_COOKIE,
+  authCookieOptions,
+  sessionTokenFromPassword,
+} from "@/lib/session";
 
-const COOKIE = "grafi_studio_auth";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
   if (ab.length !== bb.length) {
-    // still run a compare to reduce trivial timing leaks on length
     timingSafeEqual(ab, Buffer.alloc(ab.length));
     return false;
   }
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
   if (!expected) {
     return NextResponse.json(
       { error: "Studio password is not configured" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -39,21 +42,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
 
-  const forwarded = request.headers.get("x-forwarded-proto");
-  const secure =
-    forwarded === "https" ||
-    request.nextUrl.protocol === "https:" ||
-    process.env.NODE_ENV === "production";
-
+  const token = await sessionTokenFromPassword(expected);
   const res = NextResponse.json({ ok: true });
   res.cookies.set({
-    name: COOKIE,
-    value: expected,
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: MAX_AGE,
+    name: AUTH_COOKIE,
+    value: token,
+    ...authCookieOptions(MAX_AGE),
   });
+  // Clear legacy cookie if present
+  res.cookies.set({ name: "grafi_studio_auth", value: "", path: "/", maxAge: 0 });
   return res;
 }
