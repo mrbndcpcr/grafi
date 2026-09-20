@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   AUTH_COOKIE,
   authCookieOptions,
-  sessionTokenFromPassword,
+  mintSessionToken,
 } from "@/lib/session";
 
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const MAX_AGE = 60 * 60 * 24 * 30;
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -19,8 +19,8 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const expected = process.env.GRAFI_STUDIO_PASSWORD;
-  if (!expected) {
+  const expectedPw = process.env.GRAFI_STUDIO_PASSWORD;
+  if (!expectedPw) {
     return NextResponse.json(
       { error: "Studio password is not configured" },
       { status: 500 },
@@ -38,18 +38,24 @@ export async function POST(request: NextRequest) {
     password = typeof v === "string" ? v : "";
   }
 
-  if (!safeEqual(password, expected)) {
+  if (!safeEqual(password, expectedPw)) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
 
-  const token = await sessionTokenFromPassword(expected);
+  const token = await mintSessionToken();
+  if (!token) {
+    return NextResponse.json(
+      { error: "Session token is not configured" },
+      { status: 500 },
+    );
+  }
+
   const res = NextResponse.json({ ok: true });
   res.cookies.set({
     name: AUTH_COOKIE,
     value: token,
     ...authCookieOptions(MAX_AGE),
   });
-  // Clear legacy cookie if present
   res.cookies.set({ name: "grafi_studio_auth", value: "", path: "/", maxAge: 0 });
   return res;
 }

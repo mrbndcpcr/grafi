@@ -1,8 +1,20 @@
-/** Shared studio-auth cookie + session token (Edge-safe). */
+/** Shared studio-auth cookie (Edge-safe). */
 
 export const AUTH_COOKIE = "grafi_studio_session";
 
-/** Stable token derived from studio password — never store the raw password in the cookie. */
+/**
+ * Opaque session value stored in the cookie after a successful password login.
+ * Prefer GRAFI_SESSION_TOKEN (stable, not the password). Falls back to a hash of the password.
+ */
+export async function expectedSessionToken(): Promise<string | null> {
+  const dedicated = process.env.GRAFI_SESSION_TOKEN;
+  if (dedicated && dedicated.length >= 16) return dedicated;
+
+  const password = process.env.GRAFI_STUDIO_PASSWORD;
+  if (!password) return null;
+  return sessionTokenFromPassword(password);
+}
+
 export async function sessionTokenFromPassword(password: string): Promise<string> {
   const data = new TextEncoder().encode(`grafi-creative-ops:v1:${password}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -11,10 +23,9 @@ export async function sessionTokenFromPassword(password: string): Promise<string
     .join("");
 }
 
-export async function expectedSessionToken(): Promise<string | null> {
-  const password = process.env.GRAFI_STUDIO_PASSWORD;
-  if (!password) return null;
-  return sessionTokenFromPassword(password);
+/** Value to put in the cookie after password check. */
+export async function mintSessionToken(): Promise<string | null> {
+  return expectedSessionToken();
 }
 
 export function authCookieOptions(maxAge: number) {

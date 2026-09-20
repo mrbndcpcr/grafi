@@ -17,10 +17,8 @@ function absoluteUrl(request: NextRequest, path: string) {
   return new URL(path, `${proto}://${host}`);
 }
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  if (
+function isPublic(pathname: string) {
+  return (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/login") ||
     pathname.startsWith("/api/logout") ||
@@ -28,25 +26,29 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/favicon") ||
     pathname === "/logo.jpg" ||
     /\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|woff2?)$/i.test(pathname)
-  ) {
-    return NextResponse.next();
-  }
+  );
+}
 
-  const token = request.cookies.get(AUTH_COOKIE)?.value;
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (isPublic(pathname)) return NextResponse.next();
+
   const expected = await expectedSessionToken();
+  const token = request.cookies.get(AUTH_COOKIE)?.value;
 
-  if (expected && token && token === expected) {
+  if (expected && token === expected) {
     return NextResponse.next();
   }
 
-  // Migrate one release: old cookie stored the raw password
+  // Migrate legacy raw-password cookie once
   const legacy = request.cookies.get("grafi_studio_auth")?.value;
   const password = process.env.GRAFI_STUDIO_PASSWORD;
   if (password && legacy && legacy === password) {
     const res = NextResponse.next();
+    const session = expected || (await sessionTokenFromPassword(password));
     res.cookies.set({
       name: AUTH_COOKIE,
-      value: await sessionTokenFromPassword(password),
+      value: session,
       httpOnly: true,
       sameSite: "lax",
       secure: true,
@@ -62,9 +64,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const login = absoluteUrl(request, "/login");
-  if (pathname !== "/") {
-    login.searchParams.set("next", pathname);
-  }
+  if (pathname !== "/") login.searchParams.set("next", pathname);
   return NextResponse.redirect(login);
 }
 
